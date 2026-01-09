@@ -3,11 +3,10 @@ from transformers import pipeline
 class EmotionAnalyzer:
     def __init__(self):
         print("Loading emotion model...")
-        # טעינת מודל ספציפי לזיהוי רגשות (במקום חיובי/שלילי)
         self.classifier = pipeline(
-            "text-classification", 
-            model="j-hartmann/emotion-english-distilroberta-base", 
-            top_k=3  # מחזיר רק את הרגש המוביל. שנה ל-None כדי לקבל את כולם
+            "text-classification",
+            model="j-hartmann/emotion-english-distilroberta-base",
+            top_k=3  # Nitzan: return top 3 emotions
         )
         print("Model loaded successfully!")
 
@@ -49,7 +48,6 @@ class EmotionAnalyzer:
             explanation = "Sounds positive or friendly."
             confidence = "high" if top_score >= 0.70 else "medium"
 
-            # joy + tension => teasing
             if second_label in {"anger", "fear", "disgust"} and second_score >= 0.20:
                 tone = "joking_teasing"
                 explanation = "Could be joking/teasing (positive but with some tension)."
@@ -80,7 +78,6 @@ class EmotionAnalyzer:
             explanation = "Tone is not clear."
             confidence = "low"
 
-
         result = {
             "tone": tone,
             "confidence": confidence,
@@ -102,7 +99,6 @@ class EmotionAnalyzer:
         t = text.lower()
         highlights = []
 
-        # Emoji cues
         emoji_map = {
             "😂": "Laughing emoji often indicates humor/teasing.",
             "😅": "Nervous/laugh emoji can soften a message (possible teasing).",
@@ -117,7 +113,6 @@ class EmotionAnalyzer:
             if e in text:
                 highlights.append({"span": e, "type": "emoji", "reason": reason})
 
-        # Keyword cues (very small, safe list)
         keyword_map = {
             "again": "May imply repetition/annoyance or a light jab.",
             "sure": "Sometimes used in sarcastic/teasing replies (depends on context).",
@@ -134,24 +129,21 @@ class EmotionAnalyzer:
             if kw in t:
                 highlights.append({"span": kw, "type": "keyword", "reason": reason})
 
-        # Punctuation cues
         if "!!!" in text or text.count("!") >= 3:
             highlights.append({"span": "!!!", "type": "punctuation", "reason": "Many exclamation marks may indicate strong emotion."})
 
         if "???" in text or text.count("?") >= 3:
             highlights.append({"span": "???", "type": "punctuation", "reason": "Many question marks may indicate confusion or pressure."})
 
-        # ALL CAPS cue (simple)
         words = [w for w in text.split() if len(w) >= 3]
         if any(w.isupper() for w in words):
             highlights.append({"span": "ALL_CAPS", "type": "style", "reason": "ALL CAPS can be perceived as shouting/emphasis."})
 
-        return highlights[:8]  # keep it short for UI
-
+        return highlights[:8]
 
     def analyze(self, text: str):
         try:
-            results = self.classifier(text)[0]  # top-3 emotions
+            results = self.classifier(text)[0]  # top-3
 
             emotions = [
                 {"label": r["label"], "score": round(float(r["score"]), 4)}
@@ -165,26 +157,18 @@ class EmotionAnalyzer:
 
             return {
                 "text": text,
-                "emotion": top["label"],
-                "score": top["score"],
-                "emotions": emotions,
+                "emotion": top["label"],   # e.g. "joy"
+                "score": top["score"],     # float
+                "emotions": emotions,      # list of top3
                 "social_interpretation": social,
                 "highlights": highlights,
             }
 
-
         except Exception as e:
             return {"error": str(e)}
 
-# --- בדיקה עצמית ---
 if __name__ == "__main__":
     analyzer = EmotionAnalyzer()
-    
-    # בדיקת שמחה
     print(analyzer.analyze("I finally finished the project and it works perfectly!"))
-    
-    # בדיקת כעס
     print(analyzer.analyze("Why does this code keep crashing? I am so frustrated!"))
-    
-    # בדיקת פחד
     print(analyzer.analyze("I am worried about the deadline tomorrow."))

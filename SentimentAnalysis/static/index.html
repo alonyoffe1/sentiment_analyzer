@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Message Emotion Helper</title>
+
+  <style>
+    :root{
+      --card:#ffffff;
+      --text:#0f172a;
+      --muted:#475569;
+      --border:#dbe3f3;
+      --shadow: 0 18px 45px rgba(2, 6, 23, .10);
+
+      --joy:#16a34a;       --joy-bg:#dcfce7;
+      --anger:#dc2626;     --anger-bg:#fee2e2;
+      --sad:#ca8a04;       --sad-bg:#fef9c3;
+      --surprise:#2563eb;  --surprise-bg:#dbeafe;
+      --fear:#7c3aed;      --fear-bg:#ede9fe;
+      --disgust:#0f766e;   --disgust-bg:#ccfbf1;
+      --neutral:#334155;   --neutral-bg:#e2e8f0;
+      --unclear:#64748b;   --unclear-bg:#e2e8f0;
+    }
+
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family: Arial, sans-serif;
+      color:var(--text);
+      min-height:100vh;
+      background:
+        radial-gradient(900px 600px at 15% 10%, rgba(37,99,235,.18), transparent 60%),
+        radial-gradient(900px 600px at 85% 20%, rgba(22,163,74,.18), transparent 60%),
+        radial-gradient(900px 600px at 65% 90%, rgba(220,38,38,.14), transparent 60%),
+        linear-gradient(180deg, #f6f7fb 0%, #eef2ff 100%);
+    }
+
+    .wrap{
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 34px 22px 60px;
+    }
+
+    .card{
+      background: rgba(255,255,255,.92);
+      border-radius: 22px;
+      padding: 26px;
+      box-shadow: var(--shadow);
+    }
+
+    h1{ margin:0 0 10px; font-size:34px; }
+    p{ margin:0 0 16px; color:var(--muted); }
+
+    textarea{
+      width:100%;
+      min-height:170px;
+      padding:16px;
+      border-radius:16px;
+      border:1px solid var(--border);
+      font-size:16px;
+    }
+
+    button{
+      width:100%;
+      margin-top:14px;
+      padding:14px;
+      border-radius:14px;
+      border:0;
+      font-size:18px;
+      font-weight:700;
+      color:white;
+      cursor:pointer;
+      background: linear-gradient(90deg, #2563eb, #2b6cff);
+    }
+
+    .emotion-box{
+      margin-top:18px;
+      padding:18px;
+      border-radius:18px;
+      border-left:10px solid;
+      display:grid;
+      gap:12px;
+    }
+
+    .emotion-title{
+      font-size:20px;
+      font-weight:800;
+      display:flex;
+      gap:10px;
+      align-items:center;
+    }
+
+    .pill{
+      padding:4px 10px;
+      border-radius:999px;
+      background:rgba(255,255,255,.6);
+      font-size:14px;
+      font-weight:800;
+    }
+
+    .top3-wrap{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+
+    .top3-item{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      padding:8px 12px;
+      border-radius:999px;
+      background:rgba(255,255,255,.65);
+      font-weight:700;
+      font-size:14px;
+    }
+
+    .emotion-joy{ background:var(--joy-bg); border-color:var(--joy); }
+    .emotion-anger{ background:var(--anger-bg); border-color:var(--anger); }
+    .emotion-sadness{ background:var(--sad-bg); border-color:var(--sad); }
+    .emotion-surprise{ background:var(--surprise-bg); border-color:var(--surprise); }
+    .emotion-fear{ background:var(--fear-bg); border-color:var(--fear); }
+    .emotion-disgust{ background:var(--disgust-bg); border-color:var(--disgust); }
+    .emotion-neutral{ background:var(--neutral-bg); border-color:var(--neutral); }
+    .emotion-unclear{ background:var(--unclear-bg); border-color:var(--unclear); }
+  </style>
+</head>
+
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Message Emotion Helper</h1>
+    <p>Paste a message and analyze the emotions behind it.</p>
+
+    <textarea id="text" placeholder="Paste the message here..."></textarea>
+    <button id="btn">Analyze</button>
+
+    <div id="out" style="display:none;"></div>
+  </div>
+</div>
+
+<script>
+const emotionIcons = {
+  "Joy / Positive":"😊",
+  "Sadness":"😢",
+  "Anger / Frustration":"😠",
+  "Worry / Fear":"😟",
+  "Discomfort / Dislike":"😖",
+  "Surprise":"😮",
+  "Neutral":"😐",
+  "Unclear / Not sure":"🤔"
+};
+
+const emotionClasses = {
+  "Joy / Positive":"emotion-joy",
+  "Sadness":"emotion-sadness",
+  "Anger / Frustration":"emotion-anger",
+  "Worry / Fear":"emotion-fear",
+  "Discomfort / Dislike":"emotion-disgust",
+  "Surprise":"emotion-surprise",
+  "Neutral":"emotion-neutral",
+  "Unclear / Not sure":"emotion-unclear"
+};
+
+const rawToFriendly = {
+  joy:"Joy / Positive",
+  sadness:"Sadness",
+  anger:"Anger / Frustration",
+  fear:"Worry / Fear",
+  disgust:"Discomfort / Dislike",
+  surprise:"Surprise",
+  neutral:"Neutral"
+};
+
+function pct(x){ return Math.round(x*100)+"%"; }
+
+document.getElementById("btn").onclick = async () => {
+  const text = document.getElementById("text").value.trim();
+  if(!text) return;
+
+  const res = await fetch("/analyze-friendly",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({text})
+  });
+  const data = await res.json();
+
+  const main = data.emotion || "Unclear / Not sure";
+  const cls = emotionClasses[main] || "emotion-unclear";
+  const icon = emotionIcons[main] || "🤔";
+
+  const top3 = (data.emotions || []).slice(0,3).map(e=>{
+    const f = rawToFriendly[e.label] || e.label;
+    return `<div class="top3-item">
+      ${emotionIcons[f] || "🤔"} ${f} <span class="pill">${pct(e.score)}</span>
+    </div>`;
+  }).join("");
+
+  document.getElementById("out").style.display="block";
+  document.getElementById("out").className=`emotion-box ${cls}`;
+  document.getElementById("out").innerHTML = `
+    <div class="emotion-title">
+      ${icon} ${main}
+      <span class="pill">${data.confidence}</span>
+    </div>
+
+    <div><b>What it might mean:</b><br>${data.interpretation}</div>
+
+    <div><b>Top 3 emotions:</b></div>
+    <div class="top3-wrap">${top3}</div>
+  `;
+};
+</script>
+</body>
+</html>
