@@ -59,6 +59,7 @@
       border-radius:16px;
       border:1px solid var(--border);
       font-size:16px;
+      outline:none;
     }
 
     button{
@@ -73,6 +74,7 @@
       cursor:pointer;
       background: linear-gradient(90deg, #2563eb, #2b6cff);
     }
+    button:disabled{ opacity:.7; cursor:not-allowed; }
 
     .emotion-box{
       margin-top:18px;
@@ -89,6 +91,7 @@
       display:flex;
       gap:10px;
       align-items:center;
+      flex-wrap:wrap;
     }
 
     .pill{
@@ -97,6 +100,11 @@
       background:rgba(255,255,255,.6);
       font-size:14px;
       font-weight:800;
+    }
+
+    .small{
+      font-size: 13px;
+      color: var(--muted);
     }
 
     .top3-wrap{
@@ -114,6 +122,20 @@
       background:rgba(255,255,255,.65);
       font-weight:700;
       font-size:14px;
+      border: 1px solid rgba(15,23,42,.10);
+    }
+
+    .block{
+      background: rgba(255,255,255,.55);
+      border: 1px solid rgba(15,23,42,.10);
+      border-radius: 14px;
+      padding: 12px 14px;
+    }
+
+    .list{
+      margin: 0;
+      padding-left: 18px;
+      color: var(--text);
     }
 
     .emotion-joy{ background:var(--joy-bg); border-color:var(--joy); }
@@ -173,43 +195,131 @@ const rawToFriendly = {
   neutral:"Neutral"
 };
 
-function pct(x){ return Math.round(x*100)+"%"; }
+function pct(x){
+  const n = Number(x);
+  if (!isFinite(n)) return "—";
+  return Math.round(n*100) + "%";
+}
+
+function isLowConfidence(confStr){
+  return String(confStr || "").toLowerCase() === "low";
+}
+
+function escHtml(s){
+  return String(s ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
 
 document.getElementById("btn").onclick = async () => {
+  const btn = document.getElementById("btn");
+  const out = document.getElementById("out");
   const text = document.getElementById("text").value.trim();
   if(!text) return;
 
-  const res = await fetch("/analyze-friendly",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({text})
-  });
-  const data = await res.json();
+  btn.disabled = true;
+  btn.textContent = "Analyzing...";
 
-  const main = data.emotion || "Unclear / Not sure";
-  const cls = emotionClasses[main] || "emotion-unclear";
-  const icon = emotionIcons[main] || "🤔";
+  try{
+    const res = await fetch("/analyze-friendly",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({text})
+    });
 
-  const top3 = (data.emotions || []).slice(0,3).map(e=>{
-    const f = rawToFriendly[e.label] || e.label;
-    return `<div class="top3-item">
-      ${emotionIcons[f] || "🤔"} ${f} <span class="pill">${pct(e.score)}</span>
-    </div>`;
-  }).join("");
+    const data = await res.json();
 
-  document.getElementById("out").style.display="block";
-  document.getElementById("out").className=`emotion-box ${cls}`;
-  document.getElementById("out").innerHTML = `
-    <div class="emotion-title">
-      ${icon} ${main}
-      <span class="pill">${data.confidence}</span>
-    </div>
+    // Main emotion
+    const main = data.emotion || "Unclear / Not sure";
+    const cls = emotionClasses[main] || "emotion-unclear";
+    const icon = emotionIcons[main] || "🤔";
 
-    <div><b>What it might mean:</b><br>${data.interpretation}</div>
+    // Top 3
+    const top3 = (data.emotions || []).slice(0,3).map(e=>{
+      const friendly = rawToFriendly[e.label] || e.label;
+      return `<div class="top3-item">
+        ${emotionIcons[friendly] || "🤔"} ${escHtml(friendly)}
+        <span class="pill">${pct(e.score)}</span>
+      </div>`;
+    }).join("");
 
-    <div><b>Top 3 emotions:</b></div>
-    <div class="top3-wrap">${top3}</div>
-  `;
+    // Tone / social
+    const social = data.social_interpretation || {};
+    const toneName = social.tone ? String(social.tone).replaceAll("_"," ") : "—";
+    const toneConf = social.confidence || "";
+    const toneExplanation = social.explanation || "";
+    const toneNote = social.note || ""; // ✅ חייב להופיע תמיד אם קיים
+
+    // ✅ What it might mean:
+    // אם confidence הוא Low: נעדיף להציג את social.explanation (כמו אצל ניצן),
+    // ואם אין - ניפול ל-interpretation הרגיל.
+    const meaningText = isLowConfidence(data.confidence)
+      ? (toneExplanation || data.interpretation || "—")
+      : (data.interpretation || "—");
+
+    // Tone box:
+    // ✅ תמיד נציג Note אם קיים, גם אם אין explanation.
+    const toneHtml = (toneExplanation || toneNote || social.tone || social.confidence) ? `
+      <div>
+        <b>Tone analysis:</b>
+        <div class="block" style="margin-top:8px">
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <b>${escHtml(toneName)}</b>
+            ${toneConf ? `<span class="pill">${escHtml(toneConf)}</span>` : ""}
+          </div>
+
+          ${toneExplanation ? `<div style="margin-top:8px">${escHtml(toneExplanation)}</div>` : ""}
+
+          ${toneNote ? `<div class="small" style="margin-top:8px">${escHtml(toneNote)}</div>` : ""}
+        </div>
+      </div>
+    ` : "";
+
+    // Highlights
+    const highlights = (data.highlights || []);
+    const highlightsHtml = highlights.length ? `
+      <div>
+        <b>Highlights:</b>
+        <div class="block" style="margin-top:8px">
+          <ul class="list">
+            ${highlights.map(h => `
+              <li>
+                <b>${escHtml(h.span)}</b> <span class="small">(${escHtml(h.type)})</span> — ${escHtml(h.reason)}
+              </li>
+            `).join("")}
+          </ul>
+        </div>
+      </div>
+    ` : "";
+
+    out.style.display="block";
+    out.className=`emotion-box ${cls}`;
+    out.innerHTML = `
+      <div class="emotion-title">
+        ${icon} ${escHtml(main)}
+        ${data.confidence ? `<span class="pill">${escHtml(data.confidence)}</span>` : ""}
+      </div>
+
+      <div>
+        <b>What it might mean:</b><br>
+        ${escHtml(meaningText)}
+      </div>
+
+      <div><b>Top 3 emotions:</b></div>
+      <div class="top3-wrap">${top3 || "<span class='small'>—</span>"}</div>
+
+      ${toneHtml}
+      ${highlightsHtml}
+    `;
+  }catch(e){
+    alert("Could not connect to the server.");
+  }finally{
+    btn.disabled = false;
+    btn.textContent = "Analyze";
+  }
 };
 </script>
 </body>
